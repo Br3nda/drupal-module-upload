@@ -1,5 +1,5 @@
 <?php
-// $Id: upload.module,v 1.4 2004/07/09 09:42:00 jseng Exp $
+// $Id: upload.module,v 1.5 2004/07/11 14:05:56 jseng Exp $
 
 function upload_help($section) {
   $output = "";
@@ -320,6 +320,11 @@ function upload_blogadmin($type) {
   }
 
   return $list;
+}
+
+function upload_exit() {
+  // clean up error message if any
+  $_SESSION['message'] = array();
 }
 
 if (!function_exists ("mime_content_type")) {
