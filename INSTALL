@@ -1,0 +1,16 @@
+Requirements
+------------
+
+This module requires the lastest version of the current Drupal 4.4.0.
+
+Installation
+------------
+
+1. Copy the upload.module to the Drupal modules/ directory.
+
+2. Go to "modules" under "site configuration" in the administration pages and
+   enable the module.
+
+2. Check the "settings" page and set the module settings to your liking.
+
+$Id: INSTALL,v 1.1 2004/05/25 23:01:11 jseng Exp $
