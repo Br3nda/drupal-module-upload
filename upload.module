@@ -1,0 +1,324 @@
+<?php
+// $Id: upload.module,v 1.1 2004/05/25 15:05:06 jseng Exp $
+
+function upload_help($section) {
+  $output = "";
+
+  switch ($section) {
+    case 'admin/system/modules#description':
+      $output = t("Enables quick and easy file upload to drupal.");
+      break;
+    case 'admin/upload/help':
+    case 'admin/system/modules/upload':
+      $output = t("Allows quick and easy file upload to drupal. You can define permissions to upload and download file in the %userperm configuration. The permission 'download files' only works if 'Download Method' is set to Private in %sysconf. You also need to make sure your File System path is not accessible from the web.",
+        array("%userperm" => l(t("user permission"),"admin/user/permission"),
+              "%sysconf"  => l(t("system configuration"), "admin/system")));
+      break;
+  }
+  return $output;
+}
+
+function upload_perm() {
+  return array("upload files (simple)", 
+               "maintain files (simple)", 
+               "download files (simple)");
+}
+
+function upload_settings() {
+  if (!file_check_directory(file_create_path(variable_get('upload_path', 'public')))) 
+    $error['upload_path'] = theme('error', t('Directory does not exists, or is not writable.'));
+
+  $output = "";
+
+  $output .= form_textfield(t("Upload path"), "upload_path", variable_get("upload_path", "public"), 30, 255, t("Subdirectory in the directory '%dir' where upload files will be stored.", array('%dir' => variable_get("file_directory_path", "files") . FILE_SEPARATOR)) . $error['upload_path']);
+
+  $output .= form_textfield(t("Maximum file size"), "upload_filesize", variable_get("upload_filesize", 1024), 10, 10, t("Maximum file size for file upload, in kB. Default 1024kb or 1Mb."));
+
+  return $output;
+}
+
+function upload_link($type, $node = 0, $main) {
+  if ($type  == 'system') {
+    if (user_access('upload files (simple)'))
+      menu('upload', t('quick upload'), 'upload_page', 0, MENU_HIDE);
+    if (user_access('maintain files (simple)'))
+      menu('admin/upload', t('manage files'), 'upload_admin', 0);
+  }
+}
+
+function upload_page() {
+  $op = $_POST['op'] ? $_POST['op'] : arg(1);
+
+  if (!user_access("upload files (simple)"))
+    drupal_goto();
+
+  switch ($op) {
+    case 'Replace':
+      print theme('popup', _upload_upload(1), '');
+      break;
+    case 'Upload':
+      print theme('popup', _upload_upload(0), '');
+      break;
+    default:
+      print theme('popup', _upload_form(), '');
+  }
+}
+
+function _upload_form() {
+  drupal_set_title(t('Quick upload file'));
+  $output .= "<div class=\"standard\">";
+  $output .= form_file(t("Upload file"), "upload_file", 30, 
+              "You need to specify a file to upload.");
+  $output .= form_submit(t('Upload'));
+  $output .= form_submit(t('Replace'));
+  $output .= "<p>".t("'Upload' will not replace existing file. Use 'Replace' if you wish to override existing file.")."</p>";
+  $output .= "</div>";
+
+  # construct the form
+  $param["method"] = "post";
+  $param["options"]["enctype"] = "multipart/form-data";
+  return form($output, ($param['method'] ? $param['method'] : 'post'), $param['action'], $param['options']);
+}
+
+function _upload_upload($replace = 0) {
+  $edit = $_POST['edit'];
+  $upload_file = file_check_upload('upload_file');
+
+  if ((!$upload_file) || !file_exists($upload_file->path)) {
+    drupal_set_message(theme("error",t("You need to specify a file to upload.")));
+    return _upload_form();
+  }
+
+  if (filesize($upload_file->path)/1024 > variable_get("upload_filesize",1024)) {
+    drupal_set_message(theme('error',t('Maximum upload size is ').variable_get("upload_filesize", 1024)."kb.".filesize($upload_file->path)));
+    return _upload_form();
+  }
+
+  $upload_file->name = preg_replace("/[^A-Za-z0-9\-\_]/",".",$upload_file->name);
+  $upload_file->name = preg_replace("/^[\.\/]+/",".",$upload_file->name);
+  $dest = variable_get("upload_path","public").FILE_SEPARATOR.$upload_file->name;
+
+  if (!$replace && file_exists(file_create_path($dest))) {
+    drupal_set_message("File already existed!");
+    return _upload_form();
+  } 
+
+  file_save_upload('upload_file',$dest,1);
+
+  $url = file_create_url($dest);
+  if (preg_match("/\.(gif|jpg|png)$/i",$upload_file->name)) {
+    $size = getimagesize(file_create_path($dest));
+    $html = "<img src=\"$url\" alt=\"$upload_file->name\" border=\"0\"";
+    if ($size[0] && $size[1])
+     $html .= " width=\"$size[0]\" height=\"$size[1]\"";
+    $html .= "/>";
+  } else {
+    $html = "<a href=\"$url\">Download file</a>";
+  }
+
+  $output = "";
+  $output .= form_textarea(t("HTML code"),"html",$html,35,3, t("This is the HTML code which you can paste into your entry."));
+  $output .= form_button(t('Close'), "op", "button",
+    array("onClick" => "window.close()"));
+
+  watchdog("special", "upload file ".$upload_file->name, l("view file",$url));
+
+  return form($output);
+}
+
+function upload_admin() {
+  $op = $_POST["op"];
+  $edit = $_POST["edit"];
+
+  if (!user_access("maintain files (simple)"))
+    drupal_goto();
+
+  if (arg(2)) {
+    $output = _upload_admin_file(escapeshellcmd(arg(2)));
+  } else {
+    $output = _upload_admin_overview();
+  }
+
+  print theme("page",$output);
+}
+
+function _upload_filerow($dir,$file) {
+  $ffile = $dir.FILE_SEPARATOR.$file;
+  $info = stat($ffile);
+  if ($info['size'] > 1024*1024) 
+    $size = (int) ($info['size']/(1024*1024))."Mb";
+  else if ($info['size'] > 1024)
+    $size = (int) ($info['size']/1024)."kb";
+  else
+    $size = $info['size']."b";
+  return array(
+    array("data" => l($file,"admin/upload/$file") ),
+    array("data" => $size ),
+    array("data" => format_date($info['mtime']) ),
+  );
+}
+
+function _upload_admin_overview() {
+  $dir = file_create_path(variable_get('upload_path', 'public'));
+  if (!file_check_directory($dir)) {
+    drupal_set_message(t("The upload directory isn't configured properly."));
+    return drupal_goto("admin/system/modules/upload");
+  }
+
+  $output = "";
+  if ($dh = opendir($dir)) {
+    $headers = array( 
+      array("data" => t("filename") ),
+      array("data" => t("size")  ),
+      array("data" => t("date") ),
+    );
+
+    while ($file = readdir($dh)) {
+      if (is_dir($dir.FILE_SEPARATOR.$file)) continue;
+      $rows[] = _upload_filerow($dir,$file);
+    }
+    closedir($dh);
+
+    $url = url("upload");
+    $rows[] = array(array("data" => "<a href=\"javascript:void(window.open('$url','popup','width=350,height=250,resizable=yes'))\">Upload files</a>", "colspan" => 3));
+
+    $output .= theme("table",$headers, $rows);
+  }
+  return $output;
+}
+
+function _upload_admin_file($file) {
+  $op = $_POST['op'];
+  $edit = $_POST['edit'];
+
+  $dir = file_create_path(variable_get('upload_path', 'public'));
+  if (!file_exists($dir.FILE_SEPARATOR.$file)) {
+    drupal_set_message(t("No such file!"));
+    return drupal_goto("admin/upload");
+  }
+
+  switch ($op) {
+    case t('Delete'):
+      $ffile = $dir.FILE_SEPARATOR.$file;
+      @unlink($ffile);
+      watchdog("special", "delete file ".$file, "deleted");
+      drupal_goto("admin/upload");
+      break;
+
+    case t('Rename'):
+      $edit['rename'] = escapeshellcmd($edit['rename']);
+      $edit['rename'] = preg_replace("/[^A-Za-z0-9\-\_]/",".",$edit['rename']);
+      $edit['rename'] = preg_replace("/^[\.\/]+/","",$edit['rename']);
+
+      $ffile = $dir.FILE_SEPARATOR.$file;
+      $dest  = $dir.FILE_SEPARATOR.$edit['rename'];
+
+      if (file_exists($dest)) {
+        drupal_set_message(t("There is already another file by that name."));
+        return drupal_goto("admin/upload/$file");
+      }
+
+      if (copy($ffile,$dest)) {
+        @unlink($ffile);
+        $url = file_create_url(variable_get("upload_path","public").FILE_SEPARATOR.$edit['rename']);
+        watchdog("special", "rename file '$file' to '".$edit['rename']."'", l("view file",$url));
+        return drupal_goto("admin/upload/".$edit['rename']);
+      } else {
+        watchdog("error", "unable to rename file '$file' to '".$edit['rename']."'");
+        drupal_set_message(t("Error renaming file!"));
+        return drupal_goto("admin/upload/$file");
+      }
+      break;
+
+    default:
+      $headers = array( 
+        array("data" => t("filename") ),
+        array("data" => t("size")  ),
+        array("data" => t("date") ),
+      );
+    
+      $rows[] = _upload_filerow($dir,$file);
+      $output = theme("table", $headers, $rows);
+    
+      $form .= form_textfield(t("Rename"), "rename", $file, 30, 128);
+      $form .= form_submit(t("Rename"));
+      $form .= form_submit(t("Delete"));
+      $output .= form($form);
+      break;
+  }
+
+  return $output;
+}
+
+function upload_file_download($file) {
+  if (user_access("download files (simple)")) {
+    $file = file_create_path($file);
+    return array('Content-type: '.mime_content_type($file));
+  }
+}
+
+/*
+** goes into theme.inc?
+**/
+function theme_popup($content, $title = NULL, $breadcrumb = NULL) {
+  if (isset($title)) {
+    drupal_set_title($title);
+  }
+  if (isset($breadcrumb)) {
+    drupal_set_breadcrumb($breadcrumb);
+  }
+
+  $output = "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">\n";
+  $output .= "<html xmlns=\"http://www.w3.org/1999/xhtml\">";
+  $output .= "<head>";
+  $output .= " <title>". (drupal_get_title() ? drupal_get_title() : variable_get('site_name', "drupal")) ."</title>";
+  $output .= drupal_get_html_head();
+
+  $output .= " </head>";
+  $output .= " <body style=\"background-color: #fff; color: #000;\"". theme("onload_attribute"). "\">";
+  $output .= "<table border=\"0\" cellspacing=\"4\" cellpadding=\"4\"><tr>";
+  $output .= "<td style=\"vertical-align: top;\">";
+
+  $output .= "<h1>" . drupal_get_title() . "</h1>";
+  if ($help = menu_get_active_help()) {
+    $output .= "<small>$help</small><hr />";
+  }
+
+  $output .= "\n<!-- begin content -->\n";
+  $output .= $content;
+  $output .= "\n<!-- end content -->\n";
+
+  $output .= "</td></tr></table>";
+  $output .= theme_closure();
+  $output .= "</body></html>";
+
+  return $output;
+}
+
+function upload_blogadmin($type) {
+  $list = array();
+  
+  if ($type == "block") {
+    if (user_access('upload files (simple)')) {
+      $url = url("upload");
+      $list[] = "<a href=\"javascript:void(window.open('$url','popup','width=350,height=250,resizable=yes'))\">quick upload</a>";
+    }
+
+    if (user_access('maintain files (simple)'))
+      $list[] = l(t("file manager"), "admin/upload");
+  } else if ($type == "options") {
+      $list[l(t("Upload options"),"admin/system/modules/upload")] = t("Configure upload options.");
+  }
+
+  return $list;
+}
+
+if (!function_exists ("mime_content_type")) {
+  function mime_content_type ($file) {
+    $mime = exec ("file -bi " . escapeshellcmd($file));
+    if ($mime) return $mime;
+    return "application/octet-stream";
+  }
+}
+
+?>
