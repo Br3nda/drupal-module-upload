@@ -13,4 +13,4 @@ For the current maintainer send information to James Seng <jseng@pobox.org.sg>
 Note to Themer: 
   You may define how the popup windows looks like via theme_popup().
 
-$Id: README,v 1.1 2004/05/25 15:05:06 jseng Exp $
+$Id: README.txt,v 1.1 2004/10/13 13:01:51 uwe Exp $
