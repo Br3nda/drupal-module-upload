@@ -1,5 +1,5 @@
 <?php
-// $Id: upload.module,v 1.1 2004/05/25 15:05:06 jseng Exp $
+// $Id: upload.module,v 1.2 2004/07/01 10:05:12 jseng Exp $
 
 function upload_help($section) {
   $output = "";
@@ -94,8 +94,7 @@ function _upload_upload($replace = 0) {
     return _upload_form();
   }
 
-  $upload_file->name = preg_replace("/[^A-Za-z0-9\-\_]/",".",$upload_file->name);
-  $upload_file->name = preg_replace("/^[\.\/]+/",".",$upload_file->name);
+  $upload_file->name = basename($upload_file->name);
   $dest = variable_get("upload_path","public").FILE_SEPARATOR.$upload_file->name;
 
   if (!$replace && file_exists(file_create_path($dest))) {
@@ -207,8 +206,7 @@ function _upload_admin_file($file) {
 
     case t('Rename'):
       $edit['rename'] = escapeshellcmd($edit['rename']);
-      $edit['rename'] = preg_replace("/[^A-Za-z0-9\-\_]/",".",$edit['rename']);
-      $edit['rename'] = preg_replace("/^[\.\/]+/","",$edit['rename']);
+      $edit['rename'] = basename($edit['rename']);
 
       $ffile = $dir.FILE_SEPARATOR.$file;
       $dest  = $dir.FILE_SEPARATOR.$edit['rename'];
@@ -239,11 +237,21 @@ function _upload_admin_file($file) {
     
       $rows[] = _upload_filerow($dir,$file);
       $output = theme("table", $headers, $rows);
+
+      $dest = variable_get("upload_path","public").FILE_SEPARATOR.$file;
+      $url = file_create_url($dest);
+
+      $output .=" <p><b>URL</b>: <a href=\"$url\">$url</a></p>";
     
+      if (preg_match("/\.(gif|jpg|png)$/i",$file)) {
+        $output .= "<img src=\"$url\">";
+      }
+
       $form .= form_textfield(t("Rename"), "rename", $file, 30, 128);
       $form .= form_submit(t("Rename"));
       $form .= form_submit(t("Delete"));
-      $output .= form($form);
+      $output .= "<br/>".form($form);
+
       break;
   }
 
