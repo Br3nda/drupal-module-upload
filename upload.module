@@ -1,5 +1,5 @@
 <?php
-// $Id: upload.module,v 1.4 2004/07/09 09:42:00 jseng Exp $
+// $Id: upload.module,v 1.1.2.1 2004/07/09 09:56:33 jseng Exp $
 
 function upload_help($section) {
   $output = "";
