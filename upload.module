@@ -1,5 +1,5 @@
 <?php
-// $Id: upload.module,v 1.3 2004/07/04 07:56:55 jseng Exp $
+// $Id: upload.module,v 1.4 2004/07/09 09:42:00 jseng Exp $
 
 function upload_help($section) {
   $output = "";
@@ -110,7 +110,7 @@ function _upload_upload($replace = 0) {
     $html = "<img src=\"$url\" alt=\"$upload_file->name\" border=\"0\"";
     if ($size[0] && $size[1])
      $html .= " width=\"$size[0]\" height=\"$size[1]\"";
-    $html .= "/>";
+    $html .= " />";
   } else {
     $html = "<a href=\"$url\">Download file</a>";
   }
@@ -141,7 +141,8 @@ function upload_admin() {
   print theme("page",$output);
 }
 
-function _upload_filerow($dir,$file) {
+function _upload_filerow($dir,$file,$main = 1) {
+  $file_url = file_create_url(variable_get('upload_path','public').FILE_SEPARATOR.$file);
   $ffile = $dir.FILE_SEPARATOR.$file;
   $info = stat($ffile);
   if ($info['size'] > 1024*1024) 
@@ -151,7 +152,7 @@ function _upload_filerow($dir,$file) {
   else
     $size = $info['size']."b";
   return array(
-    array("data" => l($file,"admin/upload/$file") ),
+    array("data" => l($file, $main ? "admin/upload/$file" : $file_url) ),
     array("data" => $size ),
     array("data" => format_date($info['mtime']) ),
   );
@@ -174,7 +175,7 @@ function _upload_admin_overview() {
 
     while ($file = readdir($dh)) {
       if (is_dir($dir.FILE_SEPARATOR.$file)) continue;
-      $rows[] = _upload_filerow($dir,$file);
+      $rows[] = _upload_filerow($dir, $file, 1);
     }
     closedir($dh);
 
@@ -235,7 +236,7 @@ function _upload_admin_file($file) {
         array("data" => t("date") ),
       );
     
-      $rows[] = _upload_filerow($dir,$file);
+      $rows[] = _upload_filerow($dir,$file, 0);
       $output = theme("table", $headers, $rows);
 
       $dest = variable_get("upload_path","public").FILE_SEPARATOR.$file;
@@ -321,7 +322,7 @@ function upload_blogadmin($type) {
   return $list;
 }
 
-if (!function_exists("mime_content_type")) {
+if (!function_exists ("mime_content_type")) {
   function mime_content_type ($file) {
     $mime = exec ("file -bi " . escapeshellcmd($file));
     if ($mime) return $mime;
